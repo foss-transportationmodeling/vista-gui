@@ -8,10 +8,10 @@ from windows.widgets import *
 
 
 class ProjectOptionsPage(QWizardPage):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, title = ""):
         QWizardPage.__init__(self, parent)
 
-        self.setTitle("Step 1: Enter VISTA project details")
+        self.setTitle(title)
 
         nameLabel = QLabel("a. Enter project name")
         self.nameLineEdit = LineEdit()
@@ -204,9 +204,7 @@ class VDetectParamsPage(QWizardPage):
         self.nightTimeCBox.add_items(nightTimeValuesDict)
 
         # Pandas df object containing the information about videos
-        videosDf = pd.read_csv("videoDf.csv", header=0)
-
-        self.videosDf = videosDf
+        self.videosDf = pd.read_csv("videoDf.csv", header=0)
         self.videosDf.fillna("", inplace=True)
 
         # Setup the model
@@ -504,7 +502,17 @@ class DebugPage(QWizardPage):
 
         self.setLayout(debugVLayout)
 
+#Used for Configuration Wizards
+class configWizard(QWizard):
+    def __init__(self, page, title = "", parent=None):
+        QWizard.__init__(self, parent)
+        self.setWindowTitle(title)
+        self.setWizardStyle(QWizard.ClassicStyle)
 
+        self.move(0,0)
+        self.addPage(page)
+
+#New Project Wizard
 class Wizard(QWizard):
     def __init__(self, parent=None):
         QWizard.__init__(self, parent)
@@ -514,7 +522,7 @@ class Wizard(QWizard):
         self.move(0, 0)
         # self.setMinimumSize(1300, 700)
 
-        self.projectOptionsPage = ProjectOptionsPage()
+        self.projectOptionsPage = ProjectOptionsPage(title = "Step 1: Enter VISTA project details")
         # In this page the fileName, saveImgTo, dataBase properties will
         # be defined
         self.addPage(self.projectOptionsPage)
@@ -562,6 +570,8 @@ class Wizard(QWizard):
 def main():
     app = QApplication(sys.argv)
     wiz = Wizard()
+    cwiz = configWizard()
+    cwiz.show()
     wiz.show()
     app.exec_()
 

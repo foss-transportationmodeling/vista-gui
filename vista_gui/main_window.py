@@ -6,9 +6,7 @@ import pandas as pd
 from PySide.QtGui import *
 from PySide.QtCore import *
 
-from windows.widgets import *
-from wizard.project_wizard import Wizard
-
+from wizard.project_wizard import *
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -183,19 +181,28 @@ class MainWindow(QMainWindow):
     def close(self):
         QMainWindow.close(self)
 
+    #Creates an instance of configuration wizard with a single page
+    def configure_options(self, page, title = ""):
+        wiz = configWizard(page, title)
+        wiz.setWindowIcon(QIcon("./images/projectnew.png"))
+        if wiz.exec_():
+            self.project = wiz.project
+            self.setWindowTitle("VISTA (%s)" % (self.project.name))
+
+    #Project options wizard
     def project_options(self):
-        projectOptionsDialog = ProjectOptionsDialog()
-        if projectOptionsDialog.exec_():
-            pass
+        page = ProjectOptionsPage()
+        self.configure_options(page, "Project Options")
 
+    #Vehicle Detection Configuration wizard
     def detection_configuration(self):
-        videosDf = pd.read_csv("videoDf.csv", header=0)
-        vDetectParamsPage = VDetectParamsDialog(videosDf)
-        vDetectParamsPage.exec_()
+        page = VDetectParamsPage()
+        self.configure_options(page, "Detection Configuration")
 
+    #Debug options Wizard
     def debug_options(self):
-        debugPage = DebugDialog()
-        debugPage.exec_()
+        page = DebugPage()
+        self.configure_options(page, "Detect Options")
 
     def run_vista(self):
         import subprocess
