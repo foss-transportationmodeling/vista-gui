@@ -2,6 +2,7 @@
 import os
 
 import pandas as pd
+import yaml
 
 from PySide.QtGui import *
 from PySide.QtCore import *
@@ -12,6 +13,10 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         QMainWindow.__init__(self)
 
+
+        self.wizard = Wizard(main = self)
+        self.project_location = ""
+        self.location_set = False
         self.setWindowTitle("VISTA")
         iconPath = os.path.join(".", "images", "vista.png")
         self.setWindowIcon(QIcon(iconPath))
@@ -159,21 +164,35 @@ class MainWindow(QMainWindow):
                 target.addAction(action)
 
     def project_new(self):
-        self.wizard = Wizard()
         self.wizard.setWindowIcon(QIcon("./images/projectnew.png"))
 
         if self.wizard.exec_():
-            self.project = self.wizard.project
-            self.setWindowTitle("VISTA (%s)" % (self.project.name))
+            pass
 
     def project_open(self):
-        project = OpenProject()
+        saveDir = QFileDialog.getOpenFileName(
+                self, ("Save As..."),
+                self.project_location,
+                "PopGen File (*.vista)")[0]
+        try:
+            fileL = file(saveDir,'r')
+            s = yaml.load(fileL)
+            fileL.close()
+            self.project_location = s
+        except:
+            print("Corrupt File!")
 
     def project_save(self):
-        file = (QFileDialog.getSaveFileName(
-                self, ("Save As..."),
-                "C:\workspace\\vista\project\ctdot_test"
-                "PopGen File (*.vista)"))
+        if self.project_location == "":
+            print "No project to save!"
+        else:
+            saveDir = QFileDialog.getSaveFileName(
+                    self, ("Save As..."),
+                    self.project_location,
+                    "PopGen File (*.vista)")[0]
+            fileL = file(saveDir,'w')
+            yaml.dump(self.project_location,fileL)
+            fileL.close()
 
     def project_close(self):
         pass
@@ -185,23 +204,29 @@ class MainWindow(QMainWindow):
     def configure_options(self, page, title = ""):
         wiz = configWizard(page, title)
         wiz.setWindowIcon(QIcon("./images/projectnew.png"))
-        if wiz.exec_():
-            self.project = wiz.project
-            self.setWindowTitle("VISTA (%s)" % (self.project.name))
+        wiz.setButtonLayout([wiz.CancelButton, wiz.FinishButton])
+        wiz.exec_()
 
     #Project options wizard
     def project_options(self):
-        page = ProjectOptionsPage()
+        page = ProjectOptionsPage(self.wizard, maWin = self)
+        try:
+            page.populateFields()
+        except: print("No Save Data Exists!")
         self.configure_options(page, "Project Options")
 
     #Vehicle Detection Configuration wizard
     def detection_configuration(self):
-        page = VDetectParamsPage()
+        page = VDetectParamsPage(self.wizard.projectOptionsPage, maWin = self)
+        try:
+            page.populateFields()
+        except: print("No Save Data Exists!")
         self.configure_options(page, "Detection Configuration")
 
     #Debug options Wizard
     def debug_options(self):
-        page = DebugPage()
+        #page = DebugPage()
+        page = VDetectParamsPage()
         self.configure_options(page, "Detect Options")
 
     def run_vista(self):

@@ -1,29 +1,31 @@
 import sys
+import os
 import pandas as pd
 
 from PySide.QtGui import *
 from PySide.QtCore import *
-
+import random
+import yaml
 from windows.widgets import *
 
 
 class ProjectOptionsPage(QWizardPage):
-    def __init__(self, parent=None, title = ""):
+    def __init__(self, wiz, parent=None, title = "", maWin = None):
         QWizardPage.__init__(self, parent)
-
+        self.wiz = wiz
         self.setTitle(title)
+
+        self.maWin = maWin
 
         nameLabel = QLabel("a. Enter project name")
         self.nameLineEdit = LineEdit()
-        self.nameLineEdit.setText("Project_Name")
-        self.nameLineEdit.selectAll()
         nameLabel.setBuddy(self.nameLineEdit)
 
         locationLabel = QLabel("b. Select a project file location")
         self.locationComboBox = ComboBoxFolder()
         (self.locationComboBox.addItems(
-         ["C:\workspace\\vista\project\ctdot_test",
-          "Browse to select folder..."]))
+         ["Browse to select folder..."]))
+
         locationLabel.setBuddy(self.locationComboBox)
 
         descLabel = QLabel("c. Enter project description (Optional)")
@@ -31,9 +33,10 @@ class ProjectOptionsPage(QWizardPage):
         descLabel.setBuddy(self.descTextEdit)
 
         videoLabel = QLabel("d. Select traffic video(s) for this project")
-        selectButton = QPushButton("Select")
+        self.selectButton = QPushButton("Select")
         clearSelectedButton = QPushButton("Clear")
         self.videoFileListWidget = ListWidget(extendedSelection=True)
+        self.selectButton.setEnabled(False)
 
         projectVLayout = QVBoxLayout()
         projectVLayout.addWidget(nameLabel)
@@ -44,7 +47,7 @@ class ProjectOptionsPage(QWizardPage):
         projectVLayout.addWidget(self.descTextEdit)
 
         videoHLayout = QHBoxLayout()
-        videoHLayout.addWidget(selectButton)
+        videoHLayout.addWidget(self.selectButton)
         videoHLayout.addWidget(clearSelectedButton)
         videoVLayout = QVBoxLayout()
         videoVLayout.addLayout(videoHLayout)
@@ -60,16 +63,25 @@ class ProjectOptionsPage(QWizardPage):
                      self.locationComboBox.browse_folder)
         self.connect(self.locationComboBox,
                      SIGNAL("currentIndexChanged(int)"), self.location_check)
-        selectButton.clicked.connect(self.select_files)
+        self.selectButton.clicked.connect(self.select_files)
         clearSelectedButton.clicked.connect(self.clear_files)
+
+        self.data = {'project_name':self.nameLineEdit.text(),
+            'project_location': self.locationComboBox.itemText(0),
+            'project_description': self.descTextEdit.toPlainText(),
+            'project_videos':
+                [self.videoFileListWidget.item(i).text()
+                    for i in range(self.videoFileListWidget.count())]}
 
     def select_files(self):
         fileNames, extension = (QFileDialog.getOpenFileNames(
                      self, "Browse to select file",
-                     "C:\workspace\\vista\project\ctdot_test",
-                     "Video Files (*.mp4 *.avi)")
+                     self.locationComboBox.currentText(),
+                     "Video Files (*.wmv *.avi)")
                      )
+        print fileNames
         self.videoFileListWidget.add_text_list(fileNames)
+        self.wiz.vDetectParamsPage.page_update()
 
     def clear_files(self):
         selectedItems = self.videoFileListWidget.selectedItems()
@@ -80,17 +92,56 @@ class ProjectOptionsPage(QWizardPage):
         self.emit(SIGNAL("completeChanged()"))
 
     def location_check(self, int):
+        self.selectButton.setEnabled(True)
         if self.locationComboBox.currentText() == '':
             self.locationDummy = False
         else:
             self.locationDummy = True
         self.emit(SIGNAL("completeChanged()"))
 
+    def populateYaml(self):
+        self.maWin.project_location = (self.locationComboBox.currentText() + '\\' +
+            self.nameLineEdit.text())
+
+        self.data = {'project_name':self.nameLineEdit.text(),
+            'project_location': self.locationComboBox.itemText(0),
+            'project_description': self.descTextEdit.toPlainText(),
+            'project_videos':
+                [self.videoFileListWidget.item(i).text()
+                    for i in range(self.videoFileListWidget.count())]}
+
+        dire = (self.maWin.project_location + '\\' + 'data')
+
+        try:
+            open(dire+"\\test.txt", 'w').close()
+        except:
+            os.makedirs(dire)
+
+        open(dire + '\\project_options.yaml', 'w').close()
+        stream = file(dire + '\\project_options.yaml','w')
+        yaml.dump(self.data, stream)
+        print(yaml.dump(self.data))
+
+    def populateFields(self):
+        try:
+            dire = (self.maWin.project_location + '\\' + 'data')
+
+            stream = file(dire + '\\project_options.yaml','r')
+            self.data = yaml.load(stream)
+            self.nameLineEdit.setText(self.data['project_name'])
+            self.locationComboBox.insertItem(0,self.data['project_location'])
+            self.locationComboBox.setCurrentIndex(0)
+            self.descTextEdit.setText(self.data['project_description'])
+            for item in self.data['project_videos']:
+                self.videoFileListWidget.addItem(item)
+        except:
+            print("No Save Data!")
 
 class VDetectParamsPage(QWizardPage):
-    def __init__(self, parent=None):
+    def __init__(self, projectPage, maWin, parent=None):
         QWizardPage.__init__(self, parent)
-
+        self.projectPage = projectPage
+        self.maWin = maWin
         self.setTitle("Step 2: Enter the parameters for vehicle detection")
 
         # Definining all the widgets for defining the parameters
@@ -138,6 +189,10 @@ class VDetectParamsPage(QWizardPage):
         hRightOverlayRegionHLayout.addWidget(rightOverlayRegionLabel)
         hRightOverlayRegionHLayout.addWidget(self.rightOverlayRegionLineEdit)
         hRightOverlayRegionHLayout.addWidget(rightOverlayRegionConfigure)
+
+        self.overlayRegions = {'start':self.startRegionLineEdit,
+            'end':self.endRegionLineEdit,'left':self.leftOverlayRegionLineEdit,
+            'right':self.rightOverlayRegionLineEdit}
 
         bufferSizeLabel = QLabel("e. Buffer size:")
         self.bufferSizeSpinBox = QSpinBox()
@@ -203,32 +258,21 @@ class VDetectParamsPage(QWizardPage):
         nightTimeValuesDict = {"True": True, "False": False}
         self.nightTimeCBox.add_items(nightTimeValuesDict)
 
-        # Pandas df object containing the information about videos
-        self.videosDf = pd.read_csv("videoDf.csv", header=0)
-        self.videosDf.fillna("", inplace=True)
-
-        # Setup the model
-        self.setup_model()
-
-        # setting up the mapper for viewing
-        self.mapper = QDataWidgetMapper(self)
-        self.mapper.setModel(self.model)
-
-        # TODO: This is hard coded needs to be modified so the
-        # widget objects can be mapped to the columns
-        self.mapper.addMapping(self.videoLineEdit, 0)
-        self.mapper.addMapping(self.startRegionLineEdit, 1)
-        self.mapper.toFirst()
-
         # Implementing the video player
         videoPlayerLabel = QLabel("Video Player:")
-        self.video = Phonon.VideoWidget(self)
+        self.video = vwidget(self)
         self.video.setMinimumSize(720, 480)
+        self.video.setMaximumSize(720, 480)
         # self.audio = Phonon.AudioOutput(Phonon.VideoCategory, self)
         self.media = Phonon.MediaObject(self)
         # Phonon.createPath(self.media, self.audio)
         Phonon.createPath(self.media, self.video)
 
+        self.clearButton = QPushButton()
+        self.clearButton.setEnabled(False)
+        self.clearLastButton = QPushButton()
+        self.clearLastButton.setEnabled(False)
+        self.video.update()
         self.playButton = QPushButton()
         self.playButton.setIcon(QIcon("./images/play.png"))
         self.playButton.setToolTip("play")
@@ -241,6 +285,7 @@ class VDetectParamsPage(QWizardPage):
         # self.drawPolygonButton.setEnabled(False)
         self.drawPolygonButton.setIcon(QIcon("./images/polygon.png"))
         self.drawPolygonButton.setToolTip("define region")
+        self.drawPolygonButton.setEnabled(False)
 
         self.videoSlider = Phonon.SeekSlider()
         self.videoSlider.setMediaObject(self.media)
@@ -250,6 +295,9 @@ class VDetectParamsPage(QWizardPage):
         self.nextButton = QPushButton("Next")
         self.previousButton = QPushButton("Previous")
         self.previousButton.setEnabled(False)
+
+        #Sets up model
+        self.page_update()
 
         # Laying out the mapper object
         vMapperLayout = QVBoxLayout()
@@ -328,8 +376,11 @@ class VDetectParamsPage(QWizardPage):
         hPlayerButtonsLayout.addWidget(self.playButton)
         hPlayerButtonsLayout.addWidget(self.pauseButton)
         hPlayerButtonsLayout.addWidget(self.drawPolygonButton)
+        hPlayerButtonsLayout.addWidget(self.clearLastButton)
+        hPlayerButtonsLayout.addWidget(self.clearButton)
         hPlayerButtonsLayout.addWidget(self.videoSlider)
         vPlayerLayout.addLayout(hPlayerButtonsLayout)
+
 
         # Organzing the mapper and video player next to each other
         hSplitLayout = QHBoxLayout()
@@ -350,31 +401,192 @@ class VDetectParamsPage(QWizardPage):
 
         self.setLayout(vLayout)
 
-        self.previousButton.clicked.connect(self.mapper.toPrevious)
-        self.nextButton.clicked.connect(self.mapper.toNext)
-        self.mapper.currentIndexChanged.connect(self.update_buttons)
+        self.clearButton.clicked.connect(self.clearDots)
+        self.clearLastButton.clicked.connect(self.clearLastDot)
         self.media.stateChanged.connect(self.handle_state_changed)
         self.playButton.clicked.connect(self.play_video)
         self.pauseButton.clicked.connect(self.pause_video)
+        self.drawPolygonButton.clicked.connect(self.draw_polygon)
+
+        #Current region for poly select
+        self.currentRegion = None
+        self.drawState = False
 
         startRegionConfigure.clicked.connect(self.draw_start_region)
         endRegionConfigure.clicked.connect(self.draw_end_region)
-        (leftOverlayRegionConfigure.clicked.connect(
-         self.draw_left_overlay_region))
-        (rightOverlayRegionConfigure.clicked.connect(
-         self.draw_right_overlay_region))
+        leftOverlayRegionConfigure.clicked.connect(self.draw_left_overlay_region)
+        rightOverlayRegionConfigure.clicked.connect(self.draw_right_overlay_region)
+
+        self.setup_data() #Setup Data to populate fields
+
+    def clearDots(self):
+        self.video.clear()
+
+    def clearLastDot(self):
+        self.video.clearLast()
+
+    def updateRegionFields(self):
+        if not(self.currentRegion is None):
+            dots = self.video.getDots(self.currentRegion)
+            s = ""
+            for i in dots:
+                if i[2] == 0 and i[3] == 0:
+                    break
+                else:
+                    #Need to add tol
+                    size = self.video.size().toTuple()
+                    x = i[0]
+                    y = i[1]
+                    x = 0 if x < 0 else x
+                    y = 0 if y < 0 else y
+                    x = size[0] if x >= size[0] - 20 else x
+                    y = size[1] if y >= size[1] - 20 else y
+                    s += '({},{})'.format(x,y)
+                    s += ';'
+            self.overlayRegions[self.currentRegion].setText(s[:len(s)-1])
+
+    def page_update(self):
+        # Setup the model
+        self.setup_model()
+
+        # setting up the mapper for viewing
+        self.mapper = QDataWidgetMapper(self)
+        self.mapper.setModel(self.model)
+
+        # TODO: This is hard coded needs to be modified so the
+        # widget objects can be mapped to the columns
+        self.mapper.addMapping(self.videoLineEdit, 0)
+        self.mapper.addMapping(self.startRegionLineEdit, 1)
+        self.mapper.toFirst()
+        self.previousButton.clicked.connect(self.vidShiftPre)
+        self.nextButton.clicked.connect(self.vidShiftPre)
+        self.previousButton.clicked.connect(self.mapper.toPrevious)
+        self.nextButton.clicked.connect(self.mapper.toNext)
+        self.previousButton.clicked.connect(self.vidShiftPost)
+        self.nextButton.clicked.connect(self.vidShiftPost)
+        self.mapper.currentIndexChanged.connect(self.update_buttons)
+
+    def vidShiftPre(self):
+        print(self.mapper.currentIndex())
+        self.populateYaml()
+        self.video.clearAll()
+        print('shifted')
+
+    def vidShiftPost(self):
+        try:
+            self.populateFields()
+            for i in self.overlayRegions:
+                pre = self.overlayRegions[i].text()
+                if pre != "" and pre[0] == '(':
+                    points = pre.split(';')
+                    dots = []
+                    for j in points:
+                        p = j.split(',')
+                        x = int(p[0][1:])
+                        y = int(p[1][:len(p[1]) - 1])
+                        dots.append([x,y,10,10])
+                    self.video.loadCustom(dots, i)
+        except:
+            print("No Save File Exits")
+
+    def populateYaml(self, dataSet = False):
+        if not dataSet:
+            self.PageData[self.mapper.currentIndex()] = {
+                "Start_Region": self.startRegionLineEdit.text(),
+                "End_Region": self.endRegionLineEdit.text(),
+                "Left_Region": self.leftOverlayRegionLineEdit.text(),
+                "Right_Region": self.rightOverlayRegionLineEdit.text(),
+                "Buffer_Size": self.bufferSizeSpinBox.value(),
+                "Min_Object_Day": self.minObjectSizeDaySpinBox.value(),
+                "Min_Object_Night": self.minObjectSizeNightSpinBox.value(),
+                "Frame_Skip": self.skipSpinBox.value(),
+                "Learn_Time": self.learningTimeSpinBox.value(),
+                "Expected_Dist": self.expectedDistanceSpinBox.value(),
+                "Horizontal_Bandwidth": self.horizontalBandwidthSpinBox.value(),
+                "Number_Mixtures": self.nmixturesSpinBox.value(),
+                "Background_Ratio": self.backgroundratioLineEdit.text(),
+                "Detect_Shadows": self.detectShadowsCBox.currentIndex(),
+                "Night_Time": self.nightTimeCBox.currentIndex()}
+
+        for i in range(self.vids.count()):
+            dire = (self.maWin.project_location + '\\' +
+            'data\\project_params' + str(i) + '.yaml')
+
+            try:
+                open(dire, 'w').close()
+            except: os.makedirs(self.maWin.project_location + '\\' + 'data')
+
+            stream = file(dire,'w')
+            yaml.dump(self.PageData[i], stream)
+            #print(yaml.dump(self.PageData[i]))
+
+    def populateFields(self):
+
+        for i in range(self.vids.count()):
+            dire = (self.maWin.project_location + '\\' +
+            'data\\project_params' + str(i) + '.yaml')
+
+            open(dire, 'r').close()
+            stream = file(dire,'r')
+            self.PageData[i] = yaml.load(stream)
+            self.loadFields()
+
+
+    def loadFields(self):
+        fields = self.PageData[self.mapper.currentIndex()]
+        self.startRegionLineEdit.setText(fields["Start_Region"])
+        self.endRegionLineEdit.setText(fields["End_Region"])
+        self.leftOverlayRegionLineEdit.setText(fields["Left_Region"])
+        self.rightOverlayRegionLineEdit.setText(fields["Right_Region"])
+        self.bufferSizeSpinBox.setValue(fields["Buffer_Size"])
+        self.minObjectSizeDaySpinBox.setValue(fields["Min_Object_Day"])
+        self.minObjectSizeNightSpinBox.setValue(fields["Min_Object_Night"])
+        self.skipSpinBox.setValue(fields["Frame_Skip"])
+        self.learningTimeSpinBox.setValue(fields["Learn_Time"])
+        self.expectedDistanceSpinBox.setValue(fields["Expected_Dist"])
+        self.horizontalBandwidthSpinBox.setValue(fields["Horizontal_Bandwidth"])
+        self.nmixturesSpinBox.setValue(fields["Number_Mixtures"])
+        self.backgroundratioLineEdit.setText(fields["Background_Ratio"])
+        self.detectShadowsCBox.setCurrentIndex(fields["Detect_Shadows"])
+        self.nightTimeCBox.setCurrentIndex(fields["Night_Time"])
 
     def setup_model(self):
-        rows, cols = self.videosDf.shape
-        print rows, cols
-        self.model = QStandardItemModel(rows, cols, self)
-        for row in self.videosDf.iterrows():
-            for column, columnName in enumerate(self.videosDf.columns):
-                # print (row[0], column, "column name",
-                #       columnName, row[1][columnName])
-                value = row[1][columnName]
-                item = QStandardItem(value)
-                self.model.setItem(row[0], column, item)
+        self.vids = self.projectPage.videoFileListWidget
+        count = self.vids.count()
+
+        self.model = QStandardItemModel(count, 2, self)
+        self.PageData = [None for i in range(self.vids.count())]
+
+        for i in range(count):
+            value = QStandardItem()
+            value.setText(self.vids.item(i).text())
+            self.model.setItem(i, 0, value)
+            val = QStandardItem()
+            val.setText("")
+            self.model.setItem(i,1,val)
+
+    def setup_data(self):
+        try: self.populateFields()
+        except:
+            #self.populateFields()
+            self.PageData = [{
+                "Start_Region": "",
+                "End_Region": "",
+                "Left_Region": "",
+                "Right_Region": "",
+                "Buffer_Size": 2,
+                "Min_Object_Day": 5000,
+                "Min_Object_Night": 10,
+                "Frame_Skip": 3,
+                "Learn_Time": 240,
+                "Expected_Dist": 20,
+                "Horizontal_Bandwidth": 50,
+                "Number_Mixtures": 5,
+                "Background_Ratio": "0.6",
+                "Detect_Shadows": 0,
+                "Night_Time": 0} for i in range(self.vids.count())]
+
+        self.populateYaml(True)
 
     def update_buttons(self, row):
         self.previousButton.setEnabled(row > 0)
@@ -385,28 +597,64 @@ class VDetectParamsPage(QWizardPage):
         self.media.play()
         self.playButton.setEnabled(False)
         self.pauseButton.setEnabled(True)
+        self.drawPolygonButton.setEnabled(True)
+        self.video_control_buttons()
 
     def pause_video(self):
         self.media.pause()
         self.pauseButton.setEnabled(False)
         self.playButton.setEnabled(True)
+        self.drawPolygonButton.setEnabled(True)
+        self.video_control_buttons()
 
     def stop_video(self):
         self.pauseButton.setEnabled(False)
         self.playButton.setEnabled(False)
+        self.drawPolygonButton.setEnabled(False)
+        self.video_control_buttons()
         self.media.stop()
 
+    def video_control_buttons(self):
+        self.clearButton.setEnabled(False)
+        self.clearLastButton.setEnabled(False)
+        self.video.polydraw = False
+        self.drawState = False
+        self.updateRegionFields()
+
+    def draw_polygon(self):
+        if self.drawState:
+            self.pause_video()
+        else:
+            self.media.pause()
+            self.pauseButton.setEnabled(False)
+            self.playButton.setEnabled(True)
+            self.drawPolygonButton.setEnabled(True)
+            self.clearButton.setEnabled(True)
+            self.clearLastButton.setEnabled(True)
+            self.video.polydraw = True
+            self.drawState = True
+
     def draw_start_region(self):
-        self.load_video()
+        self.currentRegion = 'start'
+        self.draw_region()
 
     def draw_end_region(self):
-        self.load_video()
+        self.currentRegion = 'end'
+        self.draw_region()
 
     def draw_left_overlay_region(self):
-        self.load_video()
+        self.currentRegion = 'left'
+        self.draw_region()
 
     def draw_right_overlay_region(self):
+        self.currentRegion = 'right'
+        self.draw_region()
+
+    def draw_region(self):
+        self.video.unload()
         self.load_video()
+        self.video.load(self.currentRegion)
+        self.drawState = False
 
     def load_video(self):
         self.stop_video()
@@ -416,13 +664,13 @@ class VDetectParamsPage(QWizardPage):
         self.media.setCurrentSource(ms)
         self.media.play()
         self.pauseButton.setEnabled(True)
+        self.drawPolygonButton.setEnabled(True)
 
     def handle_state_changed(self, newstate, oldstate):
         if newstate == Phonon.ErrorState:
             source = self.media.currentSource().fileName()
-            QMessageBox.warning(self, ("ERROR: could not play: {0}"
-                                       .format(source)))
-
+            QMessageBox.warning(self, "Box", "ERROR: could not play: {0}"
+                                       .format(source))
 
 class DebugPage(QWizardPage):
     def __init__(self, parent=None):
@@ -510,11 +758,18 @@ class configWizard(QWizard):
         self.setWizardStyle(QWizard.ClassicStyle)
 
         self.move(0,0)
-        self.addPage(page)
+        self.page = page
+        self.addPage(self.page)
+        self.button(QWizard.FinishButton).clicked.connect(self.popYAML)
+
+    def popYAML(self):
+        try:
+            self.page.populateYaml()
+        except: print("Load Error")
 
 #New Project Wizard
 class Wizard(QWizard):
-    def __init__(self, parent=None):
+    def __init__(self, main, parent = None):
         QWizard.__init__(self, parent)
         self.setWindowTitle("Project Setup Wizard")
         self.setWizardStyle(QWizard.ClassicStyle)
@@ -522,16 +777,34 @@ class Wizard(QWizard):
         self.move(0, 0)
         # self.setMinimumSize(1300, 700)
 
-        self.projectOptionsPage = ProjectOptionsPage(title = "Step 1: Enter VISTA project details")
+        self.projectOptionsPage = ProjectOptionsPage(self,
+        title = "Step 1: Enter VISTA project details", maWin = main)
+        # try:
+        #     self.projectOptionsPage.populateFields()
+        # except: pass
+
         # In this page the fileName, saveImgTo, dataBase properties will
         # be defined
         self.addPage(self.projectOptionsPage)
 
-        self.vDetectParamsPage = VDetectParamsPage()
+        self.vDetectParamsPage = VDetectParamsPage(self.projectOptionsPage, maWin = main)
+        # try:
+        #     self.vDetectParamsPage.populateFields()
+        # except: pass
+
         self.addPage(self.vDetectParamsPage)
 
         self.debugPage = DebugPage()
         self.addPage(self.debugPage)
+
+        #Customize wizard buttons
+        self.button(QWizard.NextButton).clicked.disconnect()
+        self.button(QWizard.NextButton).clicked.connect(self.popYAML)
+        self.button(QWizard.FinishButton).clicked.connect(self.popYAML)
+
+        #Setup for YAML export/improt
+        self.pages = [self.projectOptionsPage, self.vDetectParamsPage, self.debugPage]
+
 
         """
         vDetectParamsPage =
@@ -565,7 +838,140 @@ class Wizard(QWizard):
         # showPathofId
         # displayType
         """
+    def popYAML(self):
+        try:
+            self.pages[self.currentId()].populateYaml()
+        except: print("Load Error")
+        self.next()
 
+class twidget(QWidget):
+
+    def __init__(self, parent=None):
+        super(twidget, self).__init__(parent=parent)
+        self.r = 200
+        self.g = 10
+        self.b = 50
+
+    def paintEvent(self, e):
+
+        qp = QPainter()
+        qp.begin(self)
+        self.drawWidget(qp)
+        qp.end()
+
+    def mousePressEvent(self, QMouseEvent):
+        print QMouseEvent.pos()
+
+    def drawWidget(self, qp):
+
+        size = self.size()
+        w = size.width()
+        h = size.height()
+
+        qp.setBrush(QColor(self.r,self.g,self.b))
+        qp.drawRect(0, 0, size.width(), size.height())
+
+class vwidget(Phonon.VideoWidget):
+
+    def __init__(self, parent=None):
+        super(vwidget, self).__init__(parent=parent)
+        self.poly = []
+        self.initPoly()
+        self.unload()
+        self.initRegions()
+        self.polydraw = False
+        self.loadpresets()
+        #self.video.size().toTuple()
+
+    def initRegions(self):
+        self.start = []
+        self.end = []
+        self.left = []
+        self.right = []
+        self.regions = {'start':self.start,'end':self.end, 'right':self.right, 'left':self.left}
+        self.clicks = {'start':0,'end':0, 'right':0, 'left':0}
+
+    def initPoly(self):
+        for i in range(50):
+            self.poly.append(twidget(parent=self))
+
+    def mousePressEvent(self, QMouseEvent):
+        xy = QMouseEvent.pos()
+        self.draw(xy.x(), xy.y())
+
+
+    def draw(self, x, y):
+        if self.polydraw:
+            width = self.size().toTuple()[0]
+            height = self.size().toTuple()[1]
+            size = 10
+            tol = 20
+            if x < tol:
+                x = -10
+                size = 20
+            if y < tol:
+                y = -10
+                size = 20
+            if x > width - tol:
+                x = width - 10
+                size = 20
+            if y > height - tol:
+                y = height - 10
+                size = 20
+            self.regions[self.region][self.clicks[self.region]] = [x,y,size,size]
+            self.polyGeom(self.regions[self.region][self.clicks[self.region]], self.clicks[self.region])
+            self.clicks[self.region] += 1
+            if self.clicks[self.region] > len(self.poly) - 1:
+                self.clicks[self.region] = 0
+
+    def polyGeom(self, lst, i):
+        self.poly[i].setGeometry(lst[0],lst[1],lst[2],lst[3])
+
+    def load(self, region):
+        self.region = region
+        self.polyDraw = False
+        for i in range(50):
+            self.polyGeom(self.regions[self.region][i], i)
+
+    def loadpresets(self):
+        for i in range(50):
+            self.start.append([0,0,0,0])
+            self.end.append([0,0,0,0])
+            self.left.append([0,0,0,0])
+            self.right.append([0,0,0,0])
+
+    def clear(self):
+        for i in range(50):
+            self.poly[i].setGeometry(0,0,0,0)
+            self.regions[self.region][i] = [0,0,0,0]
+        self.clicks[self.region] = 0
+
+    def clearLast(self):
+        self.clicks[self.region] = 0 if self.clicks[self.region] < 1 else self.clicks[self.region] - 1
+        self.poly[self.clicks[self.region]].setGeometry(0,0,0,0)
+        self.regions[self.region][self.clicks[self.region]] = [0,0,0,0]
+
+    def unload(self):
+        for i in range(50):
+            self.poly[i].setGeometry(0,0,0,0)
+
+    def getDots(self, region):
+        return self.regions[region]
+
+    def clearAll(self):
+        for i in self.regions.values():
+            for j in range(50):
+                i[j] = [0,0,0,0]
+        for i in self.clicks:
+            self.clicks[i] = 0
+        self.unload()
+
+    def loadCustom(self, points, region):
+        self.region = region
+        self.clear()
+        for i in points:
+            self.regions[self.region][self.clicks[self.region]] = i
+            self.clicks[self.region] += 1
 
 def main():
     app = QApplication(sys.argv)

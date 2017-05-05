@@ -1,0 +1,4 @@
+{Background_Ratio: !!python/unicode '0.6', Buffer_Size: 2, Detect_Shadows: 0, End_Region: !!python/unicode '',
+  Expected_Dist: 20, Frame_Skip: 3, Horizontal_Bandwidth: 10, Learn_Time: 240, Left_Region: !!python/unicode '(89,421);(89,388)',
+  Min_Object_Day: 5000, Min_Object_Night: 10, Night_Time: 0, Number_Mixtures: 5, Right_Region: !!python/unicode '(83,439);(154,351)',
+  Start_Region: !!python/unicode ''}
