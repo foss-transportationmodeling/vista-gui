@@ -187,6 +187,147 @@ class TableView(QWidget):
         layout.addWidget(dialogButtonBox)
         self.setLayout(layout)
 
+
+class TWidget(QWidget):
+
+    def __init__(self, parent=None):
+        super(TWidget, self).__init__(parent=parent)
+        self.r = 200
+        self.g = 10
+        self.b = 50
+
+    def paintEvent(self, e):
+        qp = QPainter()
+        qp.begin(self)
+        self.drawWidget(qp)
+        qp.end()
+
+    def mousePressEvent(self, QMouseEvent):
+        print QMouseEvent.pos()
+
+    def drawWidget(self, qp):
+        size = self.size()
+        w = size.width()
+        h = size.height()
+
+        qp.setBrush(QColor(self.r, self.g, self.b))
+        qp.drawRect(0, 0, size.width(), size.height())
+
+
+class VWidget(Phonon.VideoWidget):
+
+    def __init__(self, parent=None):
+        super(VWidget, self).__init__(parent=parent)
+        self.poly = []
+        self.initPoly()
+        self.unload()
+        self.initRegions()
+        self.polydraw = False
+        self.loadpresets()
+        # self.video.size().toTuple()
+
+    def initRegions(self):
+        self.start = []
+        self.end = []
+        self.left = []
+        self.right = []
+        self.regions = {
+            'start': self.start,
+            'end': self.end,
+            'right': self.right,
+            'left': self.left}
+        self.clicks = {
+            'start': 0,
+            'end': 0,
+            'right': 0,
+            'left': 0}
+
+    def initPoly(self):
+        for i in range(50):
+            self.poly.append(TWidget(parent=self))
+
+    def mousePressEvent(self, QMouseEvent):
+        xy = QMouseEvent.pos()
+        self.draw(xy.x(), xy.y())
+
+    def draw(self, x, y):
+        if self.polydraw:
+            width = self.size().toTuple()[0]
+            height = self.size().toTuple()[1]
+            size = 10
+            tol = 20
+            if x < tol:
+                x = -10
+                size = 20
+            if y < tol:
+                y = -10
+                size = 20
+            if x > width - tol:
+                x = width - 10
+                size = 20
+            if y > height - tol:
+                y = height - 10
+                size = 20
+            self.regions[self.region][self.clicks[self.region]] = [
+                x, y, size, size]
+            self.polyGeom(self.regions[self.region][self.clicks[self.region]],
+                          self.clicks[self.region])
+            self.clicks[self.region] += 1
+            if self.clicks[self.region] > len(self.poly) - 1:
+                self.clicks[self.region] = 0
+
+    def polyGeom(self, first, i):
+        self.poly[i].setGeometry(first[0], first[1], first[2], first[3])
+
+    def load(self, region):
+        self.region = region
+        self.polyDraw = False
+        for i in range(50):
+            self.polyGeom(self.regions[self.region][i], i)
+
+    def loadpresets(self):
+        for i in range(50):
+            self.start.append([0, 0, 0, 0])
+            self.end.append([0, 0, 0, 0])
+            self.left.append([0, 0, 0, 0])
+            self.right.append([0, 0, 0, 0])
+
+    def clear(self):
+        for i in range(50):
+            self.poly[i].setGeometry(0, 0, 0, 0)
+            self.regions[self.region][i] = [0, 0, 0, 0]
+        self.clicks[self.region] = 0
+
+    def clearLast(self):
+        self.clicks[self.region] = (
+            0 if self.clicks[self.region] < 1 else self.clicks[self.region] - 1
+            )
+        self.poly[self.clicks[self.region]].setGeometry(0, 0, 0, 0)
+        self.regions[self.region][self.clicks[self.region]] = [0, 0, 0, 0]
+
+    def unload(self):
+        for i in range(50):
+            self.poly[i].setGeometry(0, 0, 0, 0)
+
+    def getDots(self, region):
+        return self.regions[region]
+
+    def clearAll(self):
+        for i in self.regions.values():
+            for j in range(50):
+                i[j] = [0, 0, 0, 0]
+        for i in self.clicks:
+            self.clicks[i] = 0
+        self.unload()
+
+    def loadCustom(self, points, region):
+        self.region = region
+        self.clear()
+        for i in points:
+            self.regions[self.region][self.clicks[self.region]] = i
+            self.clicks[self.region] += 1
+
+
 if __name__ == '__main__':
     import sys
     import pandas as pd

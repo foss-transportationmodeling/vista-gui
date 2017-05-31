@@ -9,12 +9,12 @@ from PySide.QtCore import *
 
 from wizard.project_wizard import *
 
+
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         QMainWindow.__init__(self)
 
-
-        self.wizard = Wizard(main = self)
+        self.wizard = Wizard(main=self)
         self.project_location = ""
         self.location_set = False
         self.setWindowTitle("VISTA")
@@ -175,12 +175,12 @@ class MainWindow(QMainWindow):
                 self.project_location,
                 "PopGen File (*.vista)")[0]
         try:
-            fileL = file(saveDir,'r')
+            fileL = file(saveDir, 'r')
             s = yaml.load(fileL)
             fileL.close()
             self.project_location = s
-        except:
-            print("Corrupt File!")
+        except Exception, e:
+            print("Corrupt File:{0}".format(e))
 
     def project_save(self):
         if self.project_location == "":
@@ -190,8 +190,8 @@ class MainWindow(QMainWindow):
                     self, ("Save As..."),
                     self.project_location,
                     "PopGen File (*.vista)")[0]
-            fileL = file(saveDir,'w')
-            yaml.dump(self.project_location,fileL)
+            fileL = file(saveDir, 'w')
+            yaml.dump(self.project_location, fileL)
             fileL.close()
 
     def project_close(self):
@@ -200,33 +200,35 @@ class MainWindow(QMainWindow):
     def close(self):
         QMainWindow.close(self)
 
-    #Creates an instance of configuration wizard with a single page
-    def configure_options(self, page, title = ""):
-        wiz = configWizard(page, title)
+    # Creates an instance of configuration wizard with a single page
+    def configure_options(self, page, title=""):
+        wiz = ConfigWizard(page, title)
         wiz.setWindowIcon(QIcon("./images/projectnew.png"))
         wiz.setButtonLayout([wiz.CancelButton, wiz.FinishButton])
         wiz.exec_()
 
-    #Project options wizard
+    # Project options wizard
     def project_options(self):
-        page = ProjectOptionsPage(self.wizard, maWin = self)
+        page = ProjectOptionsPage(self.wizard, maWin=self)
         try:
             page.populateFields()
-        except: print("No Save Data Exists!")
+        except Exception, e:
+            print("No Save Data Exists:{0}".format(e))
         self.configure_options(page, "Project Options")
 
-    #Vehicle Detection Configuration wizard
+    # Vehicle Detection Configuration wizard
     def detection_configuration(self):
-        page = VDetectParamsPage(self.wizard.projectOptionsPage, maWin = self)
+        page = VDetectParamsPage(self.wizard.projectOptionsPage, maWin=self)
         try:
             page.populateFields()
-        except: print("No Save Data Exists!")
+        except Exception, e:
+            print("No Save Data Exists:{0}".format(e))
         self.configure_options(page, "Detection Configuration")
 
-    #Debug options Wizard
+    # Debug options Wizard
     def debug_options(self):
-        #page = DebugPage()
-        page = VDetectParamsPage()
+        page = DebugPage()
+        # page = VDetectParamsPage()
         self.configure_options(page, "Detect Options")
 
     def run_vista(self):
@@ -235,9 +237,10 @@ class MainWindow(QMainWindow):
         import sys
         DETACHED_PROCESS = 0x00000008
 
-        self.pid = (subprocess.Popen(
-                    [sys.executable, "C:\workspace\\vista\gui\\vista-gui\\vista_gui\call_vista_core.py"],
-                    creationflags=DETACHED_PROCESS))
+        self.pid = (
+            subprocess.Popen(
+                [sys.executable, "C:\\workspace\\vista\\gui\\vista-gui\\vista_gui\\call_vista_core.py"],
+                creationflags=DETACHED_PROCESS))
 
     def stop_vista(self):
         self.pid.terminate()
@@ -269,7 +272,8 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     import sys
     app = QApplication(sys.argv)
-    app.addLibraryPath("C:\Python27\Lib\site-packages\PySide\plugins\sqldrivers")
+    app.addLibraryPath(
+        "C:\Python27\Lib\site-packages\PySide\plugins\sqldrivers")
     app.setApplicationName('VISTA')
     window = MainWindow()
     window.show()
